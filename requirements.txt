@@ -1,0 +1,7 @@
+Flask
+gunicorn
+pandas
+numpy
+pytz
+fyers-apiv3
+plotly

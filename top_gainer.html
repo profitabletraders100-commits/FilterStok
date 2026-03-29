@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <title>OI Movement Analysis Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet" />
+    <script src="https://cdn.plot.ly/plotly-3.0.1.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&display=swap');
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background: linear-gradient(135deg, #0a0e1a 0%, #0f172a 50%, #1e1b4b 100%);
+            color: #ffffff;
+            font-family: 'Orbitron', 'Segoe UI', sans-serif;
+            min-height: 100vh;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background: radial-gradient(circle at 20% 50%, rgba(59,130,246,0.2) 0%, transparent 50%),
+                        radial-gradient(circle at 80% 80%, rgba(139,92,246,0.2) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: 0;
+            animation: bgPulse 8s ease-in-out infinite;
+        }
+
+        @keyframes bgPulse {
+            0%, 100% { opacity: 0.6; }
+            50% { opacity: 1; }
+        }
+
+        .dashboard-header {
+            background: rgba(17, 24, 39, 0.85);
+            backdrop-filter: blur(15px);
+            border-bottom: 2px solid rgba(59, 130, 246, 0.5);
+            padding: 15px 24px;
+            position: sticky;
+            top: 0;
+            z-index: 200;
+        }
+
+        .dashboard-header h3 {
+            background: linear-gradient(135deg, #60a5fa, #a78bfa, #f59e0b);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            font-weight: 800;
+        }
+
+        .main-content { padding: 24px; position: relative; z-index: 1; }
+
+        .card {
+            background: rgba(17, 24, 39, 0.85);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(59, 130, 246, 0.4);
+            border-radius: 20px;
+            padding: 20px;
+            margin-bottom: 20px;
+            transition: all 0.3s;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            border-color: #3b82f6;
+        }
+
+        .badge-gainer {
+            background: linear-gradient(135deg, #10b981, #059669);
+            padding: 6px 14px;
+            border-radius: 30px;
+            font-weight: bold;
+        }
+
+        .badge-loser {
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            padding: 6px 14px;
+            border-radius: 30px;
+            font-weight: bold;
+        }
+
+        .stock-card {
+            background: linear-gradient(135deg, rgba(31, 41, 55, 0.9), rgba(17, 24, 39, 0.9));
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 20px;
+            transition: all 0.3s;
+            border-left: 4px solid transparent;
+        }
+
+        .stock-card:hover {
+            transform: translateY(-3px);
+            border-left-color: #3b82f6;
+        }
+
+        .grid-2col {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(600px, 1fr));
+            gap: 20px;
+        }
+
+        .tab-btn {
+            padding: 12px 28px;
+            border: none;
+            background: rgba(31, 41, 55, 0.8);
+            color: #e2e8f0;
+            border-radius: 40px;
+            cursor: pointer;
+            margin: 0 8px;
+            transition: all 0.3s;
+            font-weight: bold;
+            font-size: 16px;
+            border: 1px solid rgba(59, 130, 246, 0.4);
+        }
+
+        .tab-btn.active {
+            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+            color: white;
+            transform: scale(1.05);
+        }
+
+        .stock-link {
+            color: #60a5fa;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 1.2rem;
+        }
+
+        .stock-link:hover { color: #a78bfa; }
+
+        .loader {
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(59, 130, 246, 0.3);
+            border-top-color: #3b82f6;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 20px auto;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .success-text { color: #10b981; font-weight: bold; }
+        .error-text { color: #ef4444; font-weight: bold; }
+        .graph-container { position: relative; min-height: 280px; }
+
+        .strike-badge {
+            background: rgba(59, 130, 246, 0.3);
+            border: 1px solid #3b82f6;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 10px;
+            margin: 2px;
+            display: inline-block;
+        }
+
+        .form-select {
+            background: rgba(31, 41, 55, 0.9);
+            color: #ffffff;
+            border: 1px solid rgba(59, 130, 246, 0.4);
+        }
+
+        .load-btn {
+            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+            border: none;
+            padding: 8px 20px;
+            border-radius: 25px;
+            color: white;
+            font-weight: bold;
+            margin-left: 10px;
+            transition: all 0.3s;
+        }
+
+        .load-btn:hover { transform: scale(1.05); }
+
+        .small-note {
+            font-size: 11px;
+            color: #93c5fd;
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-header">
+        <div class="container-fluid px-0">
+            <div class="row align-items-center">
+                <div class="col-md-4">
+                    <h3 class="mb-0"><i class="bi bi-stars text-primary me-2"></i>OI Movement Analysis</h3>
+                    <small class="text-light">Consolidated CE/PE | ATM + ITM + OTM | Forced 3-minute timeline</small>
+                </div>
+                <div class="col-md-4 text-center">
+                    <select id="date-selector" class="form-select d-inline-block w-auto" onchange="loadTimes()">
+                        <option>Select Date</option>
+                    </select>
+                    <select id="time-selector" class="form-select d-inline-block w-auto ms-2" disabled>
+                        <option>Select Time First</option>
+                    </select>
+                    <button id="load-btn" class="load-btn" onclick="loadData()" disabled>🚀 LOAD</button>
+                </div>
+                <div class="col-md-4 text-end">
+                    <i class="bi bi-clock text-primary"></i> <span id="live-clock" style="font-family: monospace;">--:--:--</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="main-content">
+        <div class="row g-3 mb-4">
+            <div class="col-md-4">
+                <div class="card text-center">
+                    <h3 id="totalStocks" style="font-size: 2.2em;">0</h3>
+                    <small>Total Stocks</small>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card text-center">
+                    <h3 class="text-success" id="gainersCount" style="font-size: 2.2em;">0</h3>
+                    <small>Gainers</small>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card text-center">
+                    <h3 class="text-danger" id="losersCount" style="font-size: 2.2em;">0</h3>
+                    <small>Losers</small>
+                </div>
+            </div>
+        </div>
+
+        <div class="text-center mb-4">
+            <button class="tab-btn active" onclick="showTab('gainers')">📈 ALL GAINERS <span id="gainersBadge">0</span></button>
+            <button class="tab-btn" onclick="showTab('losers')">📉 ALL LOSERS <span id="losersBadge">0</span></button>
+        </div>
+
+        <div id="gainersGrid" class="grid-2col"></div>
+        <div id="losersGrid" class="grid-2col" style="display: none;"></div>
+    </div>
+
+    <script>
+        let selectedDate = '';
+        let selectedTime = '';
+        let selectedTimeCode = '';
+        let expiry = '26MAR';
+        let allStocksData = {};
+        let gainersList = [];
+        let losersList = [];
+
+        const SETTINGS = {
+            minPoints: 1,
+            minBaselineOI: 0,
+            recentPoints: 1
+        };
+
+        function updateClock() {
+            document.getElementById('live-clock').innerHTML = new Date().toLocaleTimeString();
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        function showTab(tab) {
+            document.getElementById('gainersGrid').style.display = tab === 'gainers' ? 'grid' : 'none';
+            document.getElementById('losersGrid').style.display = tab === 'losers' ? 'grid' : 'none';
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            if (tab === 'gainers') document.querySelector('.tab-btn:first-child').classList.add('active');
+            else document.querySelector('.tab-btn:last-child').classList.add('active');
+        }
+
+        function normalizeTimeStr(t) {
+            const s = String(t ?? '').trim();
+            if (!s) return '';
+            if (s.includes(':')) {
+                const [hh, mm] = s.split(':');
+                return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+            }
+            if (s.length === 4) return `${s.slice(0, 2)}:${s.slice(2, 4)}`;
+            return s;
+        }
+
+        function toMinutes(t) {
+            const s = normalizeTimeStr(t);
+            const [hh, mm] = s.split(':').map(Number);
+            if (!Number.isFinite(hh) || !Number.isFinite(mm)) return null;
+            return hh * 60 + mm;
+        }
+
+        function buildThreeMinuteTimeline(selectedCutoff) {
+            const cutoffMin = toMinutes(selectedCutoff);
+            if (cutoffMin === null) return [];
+            const startMin = 9 * 60 + 15;
+            const out = [];
+            for (let m = startMin; m <= cutoffMin; m += 3) {
+                const hh = String(Math.floor(m / 60)).padStart(2, '0');
+                const mm = String(m % 60).padStart(2, '0');
+                out.push(`${hh}:${mm}`);
+            }
+            return out;
+        }
+
+        function buildPercentSeries(series) {
+            if (!series || !series.length) return [];
+            const base = Math.max(Number(series[0]) || 0, 1);
+            return series.map(v => (((Number(v) || 0) - base) / base) * 100);
+        }
+
+        function forwardFillToTimeline(sourceMap, timeline) {
+            const out = [];
+            let last = 0;
+            const sortedEntries = [...sourceMap.entries()].sort((a, b) => toMinutes(a[0]) - toMinutes(b[0]));
+            let j = 0;
+
+            for (const t of timeline) {
+                const target = toMinutes(t);
+                while (j < sortedEntries.length) {
+                    const srcMin = toMinutes(sortedEntries[j][0]);
+                    if (srcMin === null || target === null || srcMin > target) break;
+                    last = Number(sortedEntries[j][1]) || 0;
+                    j += 1;
+                }
+                out.push(last);
+            }
+            return out;
+        }
+
+        function totalVariation(arr) {
+            let tv = 0;
+            for (let i = 1; i < arr.length; i++) tv += Math.abs(arr[i] - arr[i - 1]);
+            return tv;
+        }
+
+        function computePCR(ceTotal, peTotal) {
+            const ce = ceTotal[ceTotal.length - 1] || 0;
+            const pe = peTotal[peTotal.length - 1] || 0;
+            return pe / Math.max(ce, 1);
+        }
+
+        function classifyBuild(underlyingChange, ceNet, peNet) {
+            if (underlyingChange > 0 && peNet > 0 && ceNet <= 0) return 'Bullish';
+            if (underlyingChange < 0 && ceNet > 0 && peNet <= 0) return 'Bearish';
+            if (underlyingChange > 0 && peNet > ceNet) return 'Bullish Bias';
+            if (underlyingChange < 0 && ceNet > peNet) return 'Bearish Bias';
+            return 'Neutral';
+        }
+
+        function computeMovementMetrics(timeline, ceMap, peMap) {
+            const ceTotal = forwardFillToTimeline(ceMap, timeline);
+            const peTotal = forwardFillToTimeline(peMap, timeline);
+
+            const baseline = Math.max((ceTotal[0] + peTotal[0]) || 0, 1);
+
+            const tvCE = totalVariation(ceTotal);
+            const tvPE = totalVariation(peTotal);
+            const movementPct = (tvCE + tvPE) / baseline;
+
+            const end = ceTotal.length - 1;
+            const back = Math.max(0, end - SETTINGS.recentPoints);
+            const impulsePct = (Math.abs(ceTotal[end] - ceTotal[back]) + Math.abs(peTotal[end] - peTotal[back])) / baseline;
+
+            const ceNet = ceTotal[end] - ceTotal[0];
+            const peNet = peTotal[end] - peTotal[0];
+            const pcr = computePCR(ceTotal, peTotal);
+
+            return { ceTotal, peTotal, tvCE, tvPE, movementPct, impulsePct, ceNet, peNet, pcr };
+        }
+
+        async function loadDates() {
+            try {
+                const res = await fetch('/api/available-dates');
+                const data = await res.json();
+                const select = document.getElementById('date-selector');
+                select.innerHTML = '<option>Select Date</option>';
+                if (data.dates && data.dates.length) {
+                    data.dates.forEach(d => { select.innerHTML += `<option value="${d}">${d}</option>`; });
+                }
+            } catch (e) {
+                console.error('Error:', e);
+            }
+        }
+
+        async function loadTimes() {
+            const date = document.getElementById('date-selector').value;
+            if (!date || date === 'Select Date') return;
+            selectedDate = date;
+
+            try {
+                const res = await fetch(`/api/daily-data/${date}`);
+                const data = await res.json();
+
+                if (data.success && data.times) {
+                    const timeSelect = document.getElementById('time-selector');
+                    timeSelect.innerHTML = '<option>Select Time First</option>';
+                    timeSelect.disabled = false;
+
+                    data.times.forEach(t => {
+                        const displayTime = normalizeTimeStr(String(t).padStart(4, '0'));
+                        timeSelect.innerHTML += `<option value="${displayTime}">${displayTime}</option>`;
+                    });
+
+                    timeSelect.onchange = () => {
+                        document.getElementById('load-btn').disabled = false;
+                    };
+                }
+            } catch (e) {
+                console.error('Error:', e);
+            }
+        }
+
+        async function loadData() {
+            const date = document.getElementById('date-selector').value;
+            const timeValue = document.getElementById('time-selector').value;
+            if (!date || !timeValue) return;
+
+            selectedDate = date;
+            selectedTime = normalizeTimeStr(timeValue);
+            selectedTimeCode = selectedTime.replace(':', '');
+
+            document.getElementById('gainersGrid').innerHTML = '<div class="text-center"><div class="loader"></div><p>Loading data...</p></div>';
+            document.getElementById('losersGrid').innerHTML = '';
+
+            try {
+                const res = await fetch(`/api/snapshot?date=${date}&time=${selectedTimeCode}&limit=20`);
+                const data = await res.json();
+
+                if (data.success) {
+                    document.getElementById('totalStocks').innerHTML = data.total_stocks;
+                    document.getElementById('gainersCount').innerHTML = data.gainers_count;
+                    document.getElementById('losersCount').innerHTML = data.losers_count;
+                    document.getElementById('gainersBadge').innerHTML = data.gainers.length;
+                    document.getElementById('losersBadge').innerHTML = data.losers.length;
+
+                    gainersList = data.gainers;
+                    losersList = data.losers;
+                    allStocksData = {};
+
+                    document.getElementById('gainersGrid').innerHTML = '';
+                    document.getElementById('losersGrid').innerHTML = '';
+
+                    await loadStocksWithOI(gainersList, 'gainers');
+                    await loadStocksWithOI(losersList, 'losers');
+                }
+            } catch (e) {
+                console.error('Error:', e);
+            }
+        }
+
+        async function loadStocksWithOI(stocks, type) {
+            const container = document.getElementById(`${type}Grid`);
+            if (!stocks.length) {
+                container.innerHTML = '<div class="text-center text-secondary">No stocks found</div>';
+                return;
+            }
+
+            for (let i = 0; i < stocks.length; i++) {
+                const stock = stocks[i];
+                const card = document.createElement('div');
+                card.className = 'stock-card';
+                card.id = `card-${type}-${i}`;
+                card.innerHTML = `
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <h5 class="mb-0">
+                            <a href="https://www.tradingview.com/chart/?symbol=NSE:${stock.symbol}" target="_blank" class="stock-link">${stock.symbol}</a>
+                        </h5>
+                        <span class="${stock.change >= 0 ? 'badge-gainer' : 'badge-loser'}">${stock.change >= 0 ? '+' : ''}${stock.change}%</span>
+                    </div>
+                    <div class="mb-2">💰 ₹${stock.current_price.toLocaleString()} | <span id="atm-${type}-${i}">Loading...</span></div>
+                    <div id="strikes-info-${type}-${i}" class="mb-2" style="font-size: 10px;"></div>
+                    <div class="small-note mb-2">Consolidated CE = ATM+ITM+OTM CE | Consolidated PE = ATM+ITM+OTM PE</div>
+                    <div id="graph-${type}-${i}" class="graph-container" style="height: 280px;">
+                        <div class="loader"></div>
+                    </div>
+                    <div class="mt-2 text-center small" id="status-${type}-${i}">Loading OI data...</div>
+                `;
+                container.appendChild(card);
+                await fetchStockData(stock, type, i);
+                await new Promise(resolve => setTimeout(resolve, 150));
+            }
+        }
+
+        async function fetchStockData(stock, type, idx) {
+            const atmSpan = document.getElementById(`atm-${type}-${idx}`);
+            const strikesInfoDiv = document.getElementById(`strikes-info-${type}-${idx}`);
+            const statusSpan = document.getElementById(`status-${type}-${idx}`);
+            const graphDiv = document.getElementById(`graph-${type}-${idx}`);
+
+            try {
+                const atmUrl = `/api/fetch-oi?stock=${stock.symbol}&date=${selectedDate}&time=${selectedTime}&expiry=${expiry}`;
+                const atmRes = await fetch(atmUrl);
+                const atmData = await atmRes.json();
+
+                if (!atmData.success || !atmData.strikes || atmData.strikes.length === 0) {
+                    atmSpan.innerHTML = '⚠️ No options';
+                    statusSpan.innerHTML = '⚠️ No options data';
+                    statusSpan.className = 'mt-2 text-center small error-text';
+                    graphDiv.innerHTML = '<div class="text-center text-secondary mt-5">No options available</div>';
+                    return;
+                }
+
+                const allStrikes = atmData.strikes;
+                const atmStrike = atmData.strike;
+                const rawIndex = allStrikes.indexOf(atmStrike);
+                const atmIndex = rawIndex >= 0 ? rawIndex : 0;
+
+                const itmCeStrike = allStrikes[atmIndex - 1] ?? null;
+                const itmPeStrike = allStrikes[atmIndex + 1] ?? null;
+                const otmCeStrike = allStrikes[atmIndex + 1] ?? null;
+                const otmPeStrike = allStrikes[atmIndex - 1] ?? null;
+
+                const selectedStrikes = [];
+                for (const s of [atmStrike, itmCeStrike, itmPeStrike, otmCeStrike, otmPeStrike]) {
+                    if (s !== null && !selectedStrikes.includes(s)) selectedStrikes.push(s);
+                }
+
+                atmSpan.innerHTML = `🎯 ATM: ${atmStrike} | ITM CE: ${itmCeStrike ?? 'N/A'} | ITM PE: ${itmPeStrike ?? 'N/A'} | OTM CE: ${otmCeStrike ?? 'N/A'} | OTM PE: ${otmPeStrike ?? 'N/A'}`;
+                strikesInfoDiv.innerHTML = selectedStrikes.map(s => `<span class="strike-badge">${s}</span>`).join(' ');
+
+                const ceDataMap = new Map();
+                const peDataMap = new Map();
+
+                for (const strike of selectedStrikes) {
+                    const url = `/api/fetch-oi?stock=${stock.symbol}&date=${selectedDate}&time=${selectedTime}&expiry=${expiry}&strike=${strike}`;
+                    const res = await fetch(url);
+                    const chainData = await res.json();
+
+                    if (chainData.success && chainData.ce_data) {
+                        for (const candle of chainData.ce_data) {
+                            const t = normalizeTimeStr(candle.time_str);
+                            ceDataMap.set(t, (ceDataMap.get(t) || 0) + (Number(candle.oi) || 0));
+                        }
+                    }
+
+                    if (chainData.success && chainData.pe_data) {
+                        for (const candle of chainData.pe_data) {
+                            const t = normalizeTimeStr(candle.time_str);
+                            peDataMap.set(t, (peDataMap.get(t) || 0) + (Number(candle.oi) || 0));
+                        }
+                    }
+
+                    await new Promise(resolve => setTimeout(resolve, 60));
+                }
+
+                const timeline = buildThreeMinuteTimeline(selectedTime);
+                const metrics = computeMovementMetrics(timeline, ceDataMap, peDataMap);
+
+                if (!metrics) {
+                    statusSpan.innerHTML = '⚠️ Not enough reliable OI points';
+                    statusSpan.className = 'mt-2 text-center small error-text';
+                    graphDiv.innerHTML = '<div class="text-center text-secondary mt-5">Insufficient OI data</div>';
+                    return;
+                }
+
+                const underlyingChangePct = Number(stock.change || 0);
+                const buildType = classifyBuild(underlyingChangePct, metrics.ceNet, metrics.peNet);
+
+                allStocksData[stock.symbol] = {
+                    symbol: stock.symbol,
+                    graphId: `graph-${type}-${idx}`,
+                    type,
+                    price: stock.current_price,
+                    change: underlyingChangePct,
+                    strikes: selectedStrikes,
+                    atmStrike,
+                    buildType,
+                    ceData: metrics.ceTotal,
+                    peData: metrics.peTotal,
+                    times: timeline,
+                    movementPct: metrics.movementPct,
+                    impulsePct: metrics.impulsePct,
+                    tvCE: metrics.tvCE,
+                    tvPE: metrics.tvPE,
+                    ceNet: metrics.ceNet,
+                    peNet: metrics.peNet,
+                    pcr: metrics.pcr
+                };
+
+                drawChart(stock.symbol);
+
+                statusSpan.innerHTML = `CE ΔOI: ${metrics.ceNet.toLocaleString()} | PE ΔOI: ${metrics.peNet.toLocaleString()} | Move: ${(metrics.movementPct * 100).toFixed(2)}% | PCR: ${metrics.pcr.toFixed(2)} | ${buildType}`;
+                statusSpan.className = 'mt-2 text-center small success-text';
+            } catch (e) {
+                console.error(`Error for ${stock.symbol}:`, e);
+                statusSpan.innerHTML = '❌ Error loading OI data';
+                statusSpan.className = 'mt-2 text-center small error-text';
+                graphDiv.innerHTML = '<div class="text-center text-secondary mt-5">Failed to load</div>';
+            }
+        }
+
+        function drawChart(symbol) {
+            const item = allStocksData[symbol];
+            const graphDiv = document.getElementById(item?.graphId || '');
+            if (!item || !graphDiv) return;
+
+            const cePctSeries = buildPercentSeries(item.ceData);
+            const pePctSeries = buildPercentSeries(item.peData);
+
+            graphDiv.innerHTML = '';
+            Plotly.newPlot(graphDiv, [
+                {
+                    x: item.times,
+                    y: item.ceData,
+                    customdata: cePctSeries,
+                    type: 'scatter',
+                    mode: 'lines+markers',
+                    name: 'CE Total OI',
+                    line: { color: '#ef4444', width: 2.5 },
+                    marker: { size: 4 },
+                    hovertemplate: '<b>CE Total OI</b><br>OI: %{y:,}<br>% Change: %{customdata:.2f}%<extra></extra>'
+                },
+                {
+                    x: item.times,
+                    y: item.peData,
+                    customdata: pePctSeries,
+                    type: 'scatter',
+                    mode: 'lines+markers',
+                    name: 'PE Total OI',
+                    line: { color: '#10b981', width: 2.5 },
+                    marker: { size: 4 },
+                    hovertemplate: '<b>PE Total OI</b><br>OI: %{y:,}<br>% Change: %{customdata:.2f}%<extra></extra>'
+                }
+            ], {
+                plot_bgcolor: '#1f2937',
+                paper_bgcolor: '#1f2937',
+                font: { color: '#ffffff', size: 10, family: 'Orbitron' },
+                height: 280,
+                margin: { t: 30, l: 50, r: 20, b: 50 },
+                legend: { orientation: 'h', y: 1.1, x: 0.5, xanchor: 'center' },
+                xaxis: { tickangle: 45, title: 'Time', gridcolor: '#374151' },
+                yaxis: { title: 'Total Open Interest', tickformat: '.2s', gridcolor: '#374151' },
+                hovermode: 'x unified',
+                shapes: [{
+                    type: 'line',
+                    x0: selectedTime,
+                    x1: selectedTime,
+                    y0: 0,
+                    y1: 1,
+                    yref: 'paper',
+                    line: { dash: 'dash', color: '#3b82f6', width: 1.5 }
+                }]
+            }, { responsive: true, displayModeBar: false });
+        }
+
+        loadDates();
+    </script>
+</body>
+</html>
