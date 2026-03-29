@@ -1,0 +1,3 @@
+{
+  "startCommand": "gunicorn new:app"
+}
