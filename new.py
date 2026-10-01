@@ -7,6 +7,7 @@ import threading
 import pytz
 
 import config
+import performance
 import scanner
 
 app = Flask(__name__)
@@ -188,6 +189,15 @@ def api_scan_run():
         return jsonify({'success': False, 'error': 'A scan is already running'})
     threading.Thread(target=scanner.Scanner().run_cycle, daemon=True).start()
     return jsonify({'success': True, 'message': 'Scan started'})
+
+@app.route('/api/performance')
+def api_performance():
+    """Forward test of all stored morning picks (or one day with ?date=)."""
+    date = request.args.get('date')
+    report = performance.full_report([date] if date else None)
+    if date:
+        report['day'] = performance.evaluate_day(date)
+    return jsonify({'success': True, **report})
 
 @app.route('/api/health')
 def health():

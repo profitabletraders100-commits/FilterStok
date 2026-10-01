@@ -40,9 +40,11 @@
     <div class="text-center mb-3">
         <button class="tab-btn active" id="tab-morning" onclick="setView('morning')">🌅 Morning pick</button>
         <button class="tab-btn" id="tab-latest" onclick="setView('latest')">📡 Live ranking</button>
+        <button class="tab-btn" id="tab-perf" onclick="setView('perf')">📊 Performance</button>
     </div>
     <div id="meta" class="text-center muted mb-3"></div>
-    <div class="row">
+    <div id="perf" style="display:none"></div>
+    <div class="row" id="picks">
         <div class="col-lg-6"><div class="panel"><h5 class="text-success">🟢 Long</h5><div id="longs"></div></div></div>
         <div class="col-lg-6"><div class="panel"><h5 class="text-danger">🔴 Short</h5><div id="shorts"></div></div></div>
     </div>
@@ -56,7 +58,10 @@
         view = v;
         document.getElementById('tab-morning').classList.toggle('active', v === 'morning');
         document.getElementById('tab-latest').classList.toggle('active', v === 'latest');
-        render();
+        document.getElementById('tab-perf').classList.toggle('active', v === 'perf');
+        document.getElementById('picks').style.display = v === 'perf' ? 'none' : '';
+        document.getElementById('perf').style.display = v === 'perf' ? '' : 'none';
+        if (v === 'perf') loadPerf(); else render();
     }
 
     function esc(s) {
@@ -108,9 +113,61 @@
                 (st.last_run ? `Last scan ${st.last_run}` : 'No scan yet') +
                 (st.last_error ? ` · <span class="text-danger">${esc(st.last_error)}</span>` : '');
             cache = data.success ? data : null;
-            render();
+            if (view !== 'perf') render();
         } catch (e) {
             document.getElementById('status').innerHTML = '<span class="text-danger">Server unreachable</span>';
+        }
+    }
+
+    function pct(v) {
+        if (v === null || v === undefined) return '–';
+        const cls = v > 0 ? 'text-success' : v < 0 ? 'text-danger' : '';
+        return `<span class="${cls}">${v > 0 ? '+' : ''}${v}%</span>`;
+    }
+
+    function statRow(name, s) {
+        if (!s || !s.trades) return `<tr><td>${name}</td><td colspan="5" class="muted">no trades yet</td></tr>`;
+        return `<tr><td>${name}</td><td>${s.trades}</td><td>${s.win_rate}%</td><td>${pct(s.avg_return)}</td>
+                <td>${pct(s.total_return)}</td><td>${s.profit_factor ?? '–'}</td></tr>`;
+    }
+
+    async function loadPerf() {
+        document.getElementById('meta').innerHTML = '';
+        const box = document.getElementById('perf');
+        box.innerHTML = '<div class="text-center muted">Loading…</div>';
+        try {
+            const r = await (await fetch('/api/performance')).json();
+            const st = r.settings;
+            if (!r.overall || !r.overall.trades) {
+                box.innerHTML = `<div class="panel text-center muted">No results yet. Each trading day the 09:54 picks are tracked
+                    until ${st.exit_time} (SL ${st.stop_loss_pct}%, target ${st.target_pct}%). Check back after the first full day.</div>`;
+                return;
+            }
+            const head = '<tr><th></th><th>Trades</th><th>Win</th><th>Avg</th><th>Total</th><th>PF</th></tr>';
+            const sig = Object.entries(r.signals).map(([k, v]) =>
+                `<tr><td>${esc(k)}</td><td>${pct(v.strong_avg)} <span class="muted">(${v.strong_n})</span></td>
+                 <td>${pct(v.weak_avg)} <span class="muted">(${v.weak_n})</span></td></tr>`).join('');
+            const daily = r.daily.slice().reverse().map(d =>
+                `<tr><td>${d.date}${d.complete ? '' : ' <span class="text-warning">(partial)</span>'}</td><td>${d.trades || 0}</td>
+                 <td>${d.trades ? d.win_rate + '%' : '–'}</td><td>${pct(d.avg_return)}</td><td>${pct(d.total_return)}</td></tr>`).join('');
+            box.innerHTML = `
+                <div class="muted text-center mb-3">${r.days} day(s) · entry ${esc(st.entry)} · SL ${st.stop_loss_pct}% · target ${st.target_pct}% · exit ${st.exit_time}
+                    · exits: ${Object.entries(r.exit_reasons).map(([k, v]) => `${k} ${v}`).join(', ')}</div>
+                <div class="row">
+                    <div class="col-lg-6"><div class="panel"><h5>Summary</h5><div class="table-responsive">
+                        <table class="table table-dark table-sm mb-0">${head}
+                        ${statRow('All', r.overall)}${statRow('Long', r.by_side.LONG)}${statRow('Short', r.by_side.SHORT)}
+                        ${Object.entries(r.by_rank).sort((a, b) => parseInt(a[0].slice(4)) - parseInt(b[0].slice(4))).map(([k, v]) => statRow(k.replace('_', ' '), v)).join('')}
+                        </table></div></div></div>
+                    <div class="col-lg-6"><div class="panel"><h5>Which signals work?</h5>
+                        <div class="muted mb-2">Avg return when the signal was strong vs weak (trade count)</div>
+                        <div class="table-responsive"><table class="table table-dark table-sm mb-0">
+                        <tr><th>Signal</th><th>Strong</th><th>Weak</th></tr>${sig}</table></div></div></div>
+                </div>
+                <div class="panel"><h5>Daily</h5><div class="table-responsive"><table class="table table-dark table-sm mb-0">
+                    <tr><th>Date</th><th>Trades</th><th>Win</th><th>Avg</th><th>Total</th></tr>${daily}</table></div></div>`;
+        } catch (e) {
+            box.innerHTML = '<div class="panel text-danger">Could not load performance</div>';
         }
     }
 

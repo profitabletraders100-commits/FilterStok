@@ -20,6 +20,7 @@ import pytz
 import requests
 
 import config
+import performance
 from nse_client import NSEClient, NSEError
 
 IST = pytz.timezone("Asia/Kolkata")
@@ -500,6 +501,7 @@ class Scanner:
         last_slot = None
         preopen_done = None
         status_checked = None
+        report_done = None
         open_m, close_m = hhmm_to_min(config.MARKET_OPEN_TIME), hhmm_to_min(config.MARKET_CLOSE_TIME)
         pre_m = hhmm_to_min(config.PREOPEN_FETCH_TIME)
         print("📡 NSE scanner scheduler started")
@@ -529,6 +531,13 @@ class Scanner:
                                 print(f"✅ {res['time_display']} scanned {res['universe_size']} | "
                                       f"top long {res['longs'][0]['symbol'] if res['longs'] else '-'} | "
                                       f"top short {res['shorts'][0]['symbol'] if res['shorts'] else '-'}")
+                    # After the close: score today's morning pick and send the result
+                    if m >= close_m + 3 and report_done != date_str:
+                        report_done = date_str
+                        day = performance.save_day(date_str)
+                        if day and day["summary"].get("trades"):
+                            send_telegram(performance.format_day_message(day))
+                            print(f"📊 Morning pick result: {day['summary']}")
             except Exception:
                 traceback.print_exc()
             time.sleep(5)
