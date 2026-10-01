@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NSE Morning Scanner</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <style>
+        body { background: linear-gradient(135deg, #0a0e1a 0%, #0f172a 50%, #1e1b4b 100%); color: #fff; min-height: 100vh; font-family: 'Segoe UI', sans-serif; }
+        .header { background: rgba(17,24,39,.9); border-bottom: 2px solid rgba(59,130,246,.5); padding: 14px 20px; position: sticky; top: 0; z-index: 10; }
+        .header h3 { background: linear-gradient(135deg,#60a5fa,#a78bfa,#f59e0b); -webkit-background-clip: text; background-clip: text; color: transparent; font-weight: 800; margin: 0; }
+        .panel { background: rgba(17,24,39,.85); border: 1px solid rgba(59,130,246,.4); border-radius: 16px; padding: 16px; margin-bottom: 20px; }
+        .pick { background: rgba(31,41,55,.9); border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; border-left: 4px solid #3b82f6; }
+        .pick.long { border-left-color: #10b981; }
+        .pick.short { border-left-color: #ef4444; }
+        .score { font-size: 1.4rem; font-weight: 800; }
+        .bar { height: 6px; background: #374151; border-radius: 3px; overflow: hidden; }
+        .bar > div { height: 100%; background: linear-gradient(90deg,#3b82f6,#8b5cf6); }
+        .reason { font-size: 12px; color: #cbd5e1; }
+        .muted { color: #94a3b8; font-size: 13px; }
+        a.sym { color: #60a5fa; font-weight: 700; text-decoration: none; font-size: 1.1rem; }
+        .tab-btn { padding: 8px 18px; border: 1px solid rgba(59,130,246,.4); background: rgba(31,41,55,.8); color: #e2e8f0; border-radius: 30px; margin: 4px; }
+        .tab-btn.active { background: linear-gradient(135deg,#3b82f6,#8b5cf6); color: #fff; }
+        .btn-run { background: linear-gradient(135deg,#3b82f6,#8b5cf6); border: none; color: #fff; border-radius: 20px; padding: 6px 16px; font-weight: 600; }
+    </style>
+</head>
+<body>
+<div class="header d-flex flex-wrap justify-content-between align-items-center gap-2">
+    <div>
+        <h3>🎯 NSE Morning Scanner</h3>
+        <div class="muted">F&amp;O universe from NSE every 3 min · morning pick frozen at 09:54 IST · <a href="/" class="text-info">OI dashboard</a></div>
+    </div>
+    <div class="text-end">
+        <div id="status" class="muted">Loading…</div>
+        <button class="btn-run mt-1" onclick="runNow()">⚡ Scan now</button>
+    </div>
+</div>
+
+<div class="container-fluid py-3 px-3">
+    <div class="text-center mb-3">
+        <button class="tab-btn active" id="tab-morning" onclick="setView('morning')">🌅 Morning pick</button>
+        <button class="tab-btn" id="tab-latest" onclick="setView('latest')">📡 Live ranking</button>
+    </div>
+    <div id="meta" class="text-center muted mb-3"></div>
+    <div class="row">
+        <div class="col-lg-6"><div class="panel"><h5 class="text-success">🟢 Long</h5><div id="longs"></div></div></div>
+        <div class="col-lg-6"><div class="panel"><h5 class="text-danger">🔴 Short</h5><div id="shorts"></div></div></div>
+    </div>
+</div>
+
+<script>
+    let view = 'morning';
+    let cache = null;
+
+    function setView(v) {
+        view = v;
+        document.getElementById('tab-morning').classList.toggle('active', v === 'morning');
+        document.getElementById('tab-latest').classList.toggle('active', v === 'latest');
+        render();
+    }
+
+    function esc(s) {
+        return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    }
+
+    function pickHtml(p, i) {
+        const cls = p.side === 'LONG' ? 'long' : 'short';
+        const chg = p.change_pct >= 0 ? `+${p.change_pct.toFixed(2)}` : p.change_pct.toFixed(2);
+        return `<div class="pick ${cls}">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>${i + 1}. <a class="sym" target="_blank" href="https://www.tradingview.com/chart/?symbol=NSE:${encodeURIComponent(p.symbol)}">${esc(p.symbol)}</a>
+                    <span class="ms-2">₹${p.price.toLocaleString('en-IN')}</span>
+                    <span class="ms-2 ${p.change_pct >= 0 ? 'text-success' : 'text-danger'}">${chg}%</span></div>
+                <div class="score">${p.score}</div>
+            </div>
+            <div class="bar my-1"><div style="width:${Math.min(100, p.score)}%"></div></div>
+            <div class="reason">${p.reasons.map(esc).join(' · ')}</div>
+            <div class="muted mt-1">Gap ${p.gap_pct}% · Turnover ₹${p.turnover_cr} cr${p.pcr != null ? ` · PCR ${p.pcr}` : ''}</div>
+        </div>`;
+    }
+
+    function render() {
+        const longs = document.getElementById('longs');
+        const shorts = document.getElementById('shorts');
+        const meta = document.getElementById('meta');
+        const r = cache && (view === 'morning' ? cache.morning_pick : cache.latest);
+        if (!r) {
+            const msg = view === 'morning'
+                ? 'Morning pick is published by the 09:54 IST scan (ready before 10:00).'
+                : 'No scan yet today. Scans run every 3 minutes from 09:15 IST.';
+            meta.innerHTML = '';
+            longs.innerHTML = shorts.innerHTML = `<div class="muted">${msg}</div>`;
+            return;
+        }
+        meta.innerHTML = `${r.date} · data at ${r.time_display} IST · ${r.universe_size} stocks scanned · ${r.eligible} passed filters`
+            + (r.late ? ' · <span class="text-warning">published after 10:00 (scanner started late)</span>' : '');
+        longs.innerHTML = r.longs.length ? r.longs.map(pickHtml).join('') : '<div class="muted">No long setups</div>';
+        shorts.innerHTML = r.shorts.length ? r.shorts.map(pickHtml).join('') : '<div class="muted">No short setups</div>';
+    }
+
+    async function load() {
+        try {
+            const res = await fetch('/api/scan/latest');
+            const data = await res.json();
+            const st = data.status || {};
+            document.getElementById('status').innerHTML =
+                (st.running ? '⏳ scanning… ' : '') +
+                (st.last_run ? `Last scan ${st.last_run}` : 'No scan yet') +
+                (st.last_error ? ` · <span class="text-danger">${esc(st.last_error)}</span>` : '');
+            cache = data.success ? data : null;
+            render();
+        } catch (e) {
+            document.getElementById('status').innerHTML = '<span class="text-danger">Server unreachable</span>';
+        }
+    }
+
+    async function runNow() {
+        const res = await fetch('/api/scan/run', { method: 'POST' });
+        const data = await res.json();
+        document.getElementById('status').innerHTML = data.success ? '⏳ scanning…' : esc(data.error);
+        setTimeout(load, 5000);
+    }
+
+    load();
+    setInterval(load, 30000);
+</script>
+</body>
+</html>

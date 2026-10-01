@@ -192,7 +192,7 @@
             <div class="row align-items-center">
                 <div class="col-md-4">
                     <h3 class="mb-0"><i class="bi bi-stars text-primary me-2"></i>OI Movement Analysis</h3>
-                    <small class="text-light">Consolidated CE/PE | ATM + ITM + OTM | Forced 3-minute timeline</small>
+                    <small class="text-light">NSE live data every 3 min | <a href="/scanner" class="text-info">🎯 Morning scanner</a></small>
                 </div>
                 <div class="col-md-4 text-center">
                     <select id="date-selector" class="form-select d-inline-block w-auto" onchange="loadTimes()">
@@ -245,7 +245,6 @@
         let selectedDate = '';
         let selectedTime = '';
         let selectedTimeCode = '';
-        let expiry = '26MAR';
         let allStocksData = {};
         let gainersList = [];
         let losersList = [];
@@ -468,7 +467,7 @@
                     </div>
                     <div class="mb-2">💰 ₹${stock.current_price.toLocaleString()} | <span id="atm-${type}-${i}">Loading...</span></div>
                     <div id="strikes-info-${type}-${i}" class="mb-2" style="font-size: 10px;"></div>
-                    <div class="small-note mb-2">Consolidated CE = ATM+ITM+OTM CE | Consolidated PE = ATM+ITM+OTM PE</div>
+                    <div class="small-note mb-2">Consolidated CE / PE = ATM ± 2 strikes (NSE option chain)</div>
                     <div id="graph-${type}-${i}" class="graph-container" style="height: 280px;">
                         <div class="loader"></div>
                     </div>
@@ -487,71 +486,30 @@
             const graphDiv = document.getElementById(`graph-${type}-${idx}`);
 
             try {
-                const atmUrl = `/api/fetch-oi?stock=${stock.symbol}&date=${selectedDate}&time=${selectedTime}&expiry=${expiry}`;
-                const atmRes = await fetch(atmUrl);
-                const atmData = await atmRes.json();
+                const res = await fetch(`/api/oi-series?stock=${encodeURIComponent(stock.symbol)}&date=${selectedDate}&time=${selectedTime}`);
+                const data = await res.json();
 
-                if (!atmData.success || !atmData.strikes || atmData.strikes.length === 0) {
-                    atmSpan.innerHTML = '⚠️ No options';
-                    statusSpan.innerHTML = '⚠️ No options data';
+                if (!data.success) {
+                    atmSpan.innerHTML = '⚠️ No OI data';
+                    statusSpan.innerHTML = `⚠️ ${data.error || 'No OI data'}`;
                     statusSpan.className = 'mt-2 text-center small error-text';
-                    graphDiv.innerHTML = '<div class="text-center text-secondary mt-5">No options available</div>';
+                    graphDiv.innerHTML = '<div class="text-center text-secondary mt-5">No OI data available</div>';
                     return;
                 }
 
-                const allStrikes = atmData.strikes;
-                const atmStrike = atmData.strike;
-                const rawIndex = allStrikes.indexOf(atmStrike);
-                const atmIndex = rawIndex >= 0 ? rawIndex : 0;
+                const hasOptions = data.ce_oi.some(v => v !== null) && data.pe_oi.some(v => v !== null);
+                atmSpan.innerHTML = `🎯 ATM: ${data.atm ?? 'N/A'} | PCR: ${data.pcr ?? 'N/A'} | F&O OI Δ: ${data.oi_change_pct ?? 'N/A'}%`;
+                strikesInfoDiv.innerHTML = hasOptions ? '<span class="strike-badge">ATM ± 2 strikes</span>' : '';
 
-                const itmCeStrike = allStrikes[atmIndex - 1] ?? null;
-                const itmPeStrike = allStrikes[atmIndex + 1] ?? null;
-                const otmCeStrike = allStrikes[atmIndex + 1] ?? null;
-                const otmPeStrike = allStrikes[atmIndex - 1] ?? null;
-
-                const selectedStrikes = [];
-                for (const s of [atmStrike, itmCeStrike, itmPeStrike, otmCeStrike, otmPeStrike]) {
-                    if (s !== null && !selectedStrikes.includes(s)) selectedStrikes.push(s);
-                }
-
-                atmSpan.innerHTML = `🎯 ATM: ${atmStrike} | ITM CE: ${itmCeStrike ?? 'N/A'} | ITM PE: ${itmPeStrike ?? 'N/A'} | OTM CE: ${otmCeStrike ?? 'N/A'} | OTM PE: ${otmPeStrike ?? 'N/A'}`;
-                strikesInfoDiv.innerHTML = selectedStrikes.map(s => `<span class="strike-badge">${s}</span>`).join(' ');
-
-                const ceDataMap = new Map();
-                const peDataMap = new Map();
-
-                for (const strike of selectedStrikes) {
-                    const url = `/api/fetch-oi?stock=${stock.symbol}&date=${selectedDate}&time=${selectedTime}&expiry=${expiry}&strike=${strike}`;
-                    const res = await fetch(url);
-                    const chainData = await res.json();
-
-                    if (chainData.success && chainData.ce_data) {
-                        for (const candle of chainData.ce_data) {
-                            const t = normalizeTimeStr(candle.time_str);
-                            ceDataMap.set(t, (ceDataMap.get(t) || 0) + (Number(candle.oi) || 0));
-                        }
-                    }
-
-                    if (chainData.success && chainData.pe_data) {
-                        for (const candle of chainData.pe_data) {
-                            const t = normalizeTimeStr(candle.time_str);
-                            peDataMap.set(t, (peDataMap.get(t) || 0) + (Number(candle.oi) || 0));
-                        }
-                    }
-
-                    await new Promise(resolve => setTimeout(resolve, 60));
-                }
+                const ceMap = new Map();
+                const peMap = new Map();
+                data.times.forEach((t, i) => {
+                    if (data.ce_oi[i] !== null) ceMap.set(t, data.ce_oi[i]);
+                    if (data.pe_oi[i] !== null) peMap.set(t, data.pe_oi[i]);
+                });
 
                 const timeline = buildThreeMinuteTimeline(selectedTime);
-                const metrics = computeMovementMetrics(timeline, ceDataMap, peDataMap);
-
-                if (!metrics) {
-                    statusSpan.innerHTML = '⚠️ Not enough reliable OI points';
-                    statusSpan.className = 'mt-2 text-center small error-text';
-                    graphDiv.innerHTML = '<div class="text-center text-secondary mt-5">Insufficient OI data</div>';
-                    return;
-                }
-
+                const metrics = computeMovementMetrics(timeline, ceMap, peMap);
                 const underlyingChangePct = Number(stock.change || 0);
                 const buildType = classifyBuild(underlyingChangePct, metrics.ceNet, metrics.peNet);
 
@@ -561,24 +519,21 @@
                     type,
                     price: stock.current_price,
                     change: underlyingChangePct,
-                    strikes: selectedStrikes,
-                    atmStrike,
+                    hasOptions,
                     buildType,
                     ceData: metrics.ceTotal,
                     peData: metrics.peTotal,
+                    oiTimes: data.times,
+                    oiData: data.oi,
                     times: timeline,
-                    movementPct: metrics.movementPct,
-                    impulsePct: metrics.impulsePct,
-                    tvCE: metrics.tvCE,
-                    tvPE: metrics.tvPE,
-                    ceNet: metrics.ceNet,
-                    peNet: metrics.peNet,
                     pcr: metrics.pcr
                 };
 
                 drawChart(stock.symbol);
 
-                statusSpan.innerHTML = `CE ΔOI: ${metrics.ceNet.toLocaleString()} | PE ΔOI: ${metrics.peNet.toLocaleString()} | Move: ${(metrics.movementPct * 100).toFixed(2)}% | PCR: ${metrics.pcr.toFixed(2)} | ${buildType}`;
+                statusSpan.innerHTML = hasOptions
+                    ? `CE ΔOI: ${metrics.ceNet.toLocaleString()} | PE ΔOI: ${metrics.peNet.toLocaleString()} | Move: ${(metrics.movementPct * 100).toFixed(2)}% | PCR: ${metrics.pcr.toFixed(2)} | ${buildType}`
+                    : `Total F&O OI shown (option chain fetched only for top-scored stocks)`;
                 statusSpan.className = 'mt-2 text-center small success-text';
             } catch (e) {
                 console.error(`Error for ${stock.symbol}:`, e);
@@ -597,6 +552,19 @@
             const pePctSeries = buildPercentSeries(item.peData);
 
             graphDiv.innerHTML = '';
+            if (!item.hasOptions) {
+                Plotly.newPlot(graphDiv, [{
+                    x: item.oiTimes, y: item.oiData, type: 'scatter', mode: 'lines+markers',
+                    name: 'Total F&O OI', line: { color: '#60a5fa', width: 2.5 }, marker: { size: 4 }
+                }], {
+                    plot_bgcolor: '#1f2937', paper_bgcolor: '#1f2937',
+                    font: { color: '#ffffff', size: 10, family: 'Orbitron' }, height: 280,
+                    margin: { t: 30, l: 50, r: 20, b: 50 },
+                    xaxis: { tickangle: 45, title: 'Time', gridcolor: '#374151' },
+                    yaxis: { title: 'Open Interest', tickformat: '.2s', gridcolor: '#374151' }
+                }, { responsive: true, displayModeBar: false });
+                return;
+            }
             Plotly.newPlot(graphDiv, [
                 {
                     x: item.times,

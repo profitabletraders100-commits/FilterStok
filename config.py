@@ -1,46 +1,47 @@
+import os
+
 # =========================
-# TIMEFRAME
+# NSE FETCH SCHEDULE (IST)
 # =========================
-TIMEFRAME_MINUTES = 5
+FETCH_INTERVAL_MINUTES = 3        # pull fresh NSE data every 3 minutes
+PREOPEN_FETCH_TIME = "09:08"      # pre-open session snapshot (IEP / gap)
+MARKET_OPEN_TIME = "09:15"
+MARKET_CLOSE_TIME = "15:30"
+FINAL_PICK_TIME = "09:54"         # the cycle that publishes the morning pick (lands before 10:00)
+
+# =========================
+# UNIVERSE
+# =========================
+# NSE index whose constituents are scanned. "SECURITIES IN F&O" = every F&O stock.
+SCAN_INDEX = os.environ.get("SCAN_INDEX", "SECURITIES IN F&O")
+
+# =========================
+# FILTERS
+# =========================
+MIN_PRICE = 50                    # skip penny stocks
+MIN_TURNOVER_CR = 5               # min traded value so far today (₹ crore)
+MAX_GAP_PCT = 6                   # skip stocks that gapped more than this (chasing risk)
+
+# =========================
+# SCORING
+# =========================
+TOP_N = 10                        # picks per side (long / short)
+OPTION_CHAIN_LIMIT = 30           # option chains fetched per cycle (top candidates only)
 
 # =========================
 # ALERT TOGGLES
 # =========================
+ENABLE_SCANNER = os.environ.get("ENABLE_SCANNER", "1") == "1"
 ENABLE_TELEGRAM = True
-ENABLE_PDH_PDL_ALERT = True
-ENABLE_IGNORE_ALERT = True
-ENABLE_OI = True
-ENABLE_INDEX_SNAPSHOT = True
-ENABLE_TOP_GAINERS_LOSERS = True
-INDEX_REFRESH_INTERVAL = 300  # 5 minutes in seconds
-
-# =========================
-# OI
-# =========================
-OI_STRIKES = 6   # 5 ITM + 1 ATM
-
-# =========================
-# WATCHLIST
-# =========================
-WATCHLIST_GROUP_SIZE = 30
-BULL_WATCHLIST_FILE = "watchlist_bull.txt"
-BEAR_WATCHLIST_FILE = "watchlist_bear.txt"
 
 # =========================
 # DATA STORAGE
 # =========================
-ALERTS_DB_FILE = "alerts_data.json"
-
-# ===============================
-# FYERS
-# ===============================
-FYERS_CLIENT_ID = "9JBFRPEGYO-100"
-FYERS_SECRET_KEY = "SX1BEJZMLS"
-FYERS_REDIRECT_URI = "https://127.0.0.1/"
-FYERS_ACCESS_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhdWQiOlsiZDoxIiwiZDoyIiwieDowIiwieDoxIl0sImF0X2hhc2giOiJnQUFBQUFCcHlMd1poQnE5am9OYVExUVBUNWdOanV6TDFrRlktNjBIc1I3dm9CUGJfSHZXSGFjRG9tTW1NakxCeGNqRUJXQnVna1R2djVZVXJvY1BCOElhSmZJRWVaalRiMUZnaUo0S2dFaDhGeU91Nm43X1Iwaz0iLCJkaXNwbGF5X25hbWUiOiIiLCJvbXMiOiJLMSIsImhzbV9rZXkiOiI3YWUzNzEyYjJmMDgzZmRiNjYxMDllMDYyZGZiMzhkYTc0ODdkMmVjNjEyMTI4YTg1MDM4M2ZlNiIsImlzRGRwaUVuYWJsZWQiOiJZIiwiaXNNdGZFbmFibGVkIjoiWSIsImZ5X2lkIjoiWUowNDcyMCIsImFwcFR5cGUiOjEwMCwiZXhwIjoxNzc0ODMwNjAwLCJpYXQiOjE3NzQ3NjMwMzMsImlzcyI6ImFwaS5meWVycy5pbiIsIm5iZiI6MTc3NDc2MzAzMywic3ViIjoiYWNjZXNzX3Rva2VuIn0.iFtFuddPraX4mftBvyBTVT36gXSQa6VJq9n2jSvPKIc"
+JSON_DIR = "oi_data_json"
+SCAN_DIR = "scan_results"
 
 # ===============================
 # TELEGRAM SETTINGS
 # ===============================
-TELEGRAM_BOT_TOKEN = "8467935956:AAFyIwMCpFkkReR94RJflO6uZmk5d0tDOO8"
-TELEGRAM_CHAT_ID = "2063497381"
+TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "8467935956:AAFyIwMCpFkkReR94RJflO6uZmk5d0tDOO8")
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "2063497381")
